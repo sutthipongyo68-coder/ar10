@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full select-none overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>นักสืบไซเบอร์ ป.5 (AR Cyber Sleuth)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            blue: '#00f0ff',
+                            pink: '#ff007f',
+                            purple: '#7000ff',
+                            dark: '#0a0a16',
+                            card: 'rgba(15, 23, 42, 0.75)'
+                        }
+                    },
+                    fontFamily: {
+                        kanit: ['Kanit', 'sans-serif']
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 2s infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                        'pop-in': 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { boxShadow: '0 0 15px rgba(0, 240, 255, 0.4), inset 0 0 15px rgba(0, 240, 255, 0.2)' },
+                            '50%': { boxShadow: '0 0 30px rgba(0, 240, 255, 0.8), inset 0 0 25px rgba(0, 240, 255, 0.4)' }
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-8px)' }
+                        },
+                        popIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.8)' },
+                            '100%': { opacity: '1', transform: 'scale(1)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome & Google Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            background-color: #0a0a16;
+            color: #f3f4f6;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(0, 240, 255, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-button {
+            background: rgba(0, 240, 255, 0.1);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(0, 240, 255, 0.4);
+            transition: all 0.2s ease;
+        }
+
+        .glass-button:hover:not(:disabled) {
+            background: rgba(0, 240, 255, 0.25);
+            border-color: rgba(0, 240, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .glass-button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .glass-button.selected {
+            background: rgba(0, 240, 255, 0.4);
+            border-color: #00f0ff;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.7);
+        }
+
+        /* Mirrored video frame for AR */
+        .mirror {
+            transform: scaleX(-1);
+        }
+
+        /* Custom Scrollbar for rankings */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(10, 10, 22, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 240, 255, 0.4);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="h-full w-full relative overflow-hidden bg-cyber-dark text-white">
+
+    <!-- AR BACKGROUND VIDEO & OVERLAY CANVAS -->
+    <div class="fixed inset-0 w-full h-full z-0 overflow-hidden">
+        <video id="ar-video" class="w-full h-full object-cover mirror absolute inset-0" playsinline autoplay muted></video>
+        <canvas id="ar-canvas" class="w-full h-full absolute inset-0 z-10 pointer-events-none mirror"></canvas>
+        <canvas id="fx-canvas" class="w-full h-full absolute inset-0 z-20 pointer-events-none"></canvas>
+        <!-- Dark Overlay for Readability -->
+        <div class="absolute inset-0 bg-cyber-dark/60 z-10 backdrop-brightness-90"></div>
+    </div>
+
+    <!-- VIRTUAL AR CURSOR FOR HAND TRACKING -->
+    <div id="ar-cursor" class="fixed z-50 w-8 h-8 rounded-full border-2 border-cyber-blue bg-cyber-blue/30 shadow-[0_0_20px_#00f0ff] pointer-events-none transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 hidden">
+        <div class="w-2 h-2 bg-white rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></div>
+        <div id="cursor-progress" class="absolute -inset-1 rounded-full border-2 border-cyber-pink border-t-transparent animate-spin hidden"></div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="relative z-30 w-full h-full flex flex-col justify-between p-4 md:p-6 max-w-5xl mx-auto">
+
+        <!-- ==================== SCREEN 1: WELCOME SCREEN ==================== -->
+        <section id="screen-welcome" class="w-full h-full flex flex-col items-center justify-center animate-pop-in space-y-6 my-auto">
+            
+            <!-- App Header Title -->
+            <div class="text-center space-y-2">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyber-purple/40 border border-cyber-purple text-xs md:text-sm font-semibold tracking-wide text-cyber-blue uppercase">
+                    <i class="fa-solid fa-shield-halved animate-pulse"></i> วิทยาการคำนวณ ป.5/3
+                </div>
+                <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyber-blue via-white to-cyber-pink drop-shadow-[0_2px_10px_rgba(0,240,255,0.3)]">
+                    นักสืบไซเบอร์ ป.5
+                </h1>
+                <p class="text-gray-300 text-sm md:text-base max-w-md mx-auto">
+                    ภารกิจพิชิตความปลอดภัยบนโลกอินเทอร์เน็ต! สแกนใบหน้า ยืนยันตัวตน แล้วเริ่มภารกิจ
+                </p>
+            </div>
+
+            <!-- Profile & Photo Capture Box -->
+            <div class="glass-panel p-6 rounded-2xl w-full max-w-sm flex flex-col items-center space-y-4 animate-pulse-glow">
+                <div class="relative w-36 h-36 rounded-full overflow-hidden border-2 border-cyber-blue shadow-[0_0_20px_rgba(0,240,255,0.4)] bg-cyber-dark/80 flex items-center justify-center">
+                    <img id="avatar-preview" src="" class="w-full h-full object-cover hidden" alt="Player Avatar">
+                    <div id="avatar-placeholder" class="text-center p-2 text-gray-400">
+                        <i class="fa-solid fa-user-secret text-4xl mb-1 text-cyber-blue"></i>
+                        <p class="text-xs">ถ่ายรูปเพื่อสร้างบัตรนักสืบ</p>
+                    </div>
+                </div>
+
+                <button id="btn-take-photo" class="glass-button w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-cyber-blue flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-camera"></i> ถ่ายรูปโปรไฟล์
+                </button>
+
+                <!-- Player Name Input -->
+                <div class="w-full space-y-1">
+                    <label for="player-name" class="text-xs text-gray-300 font-medium flex justify-between">
+                        <span>ชื่อนักสืบดิจิทัล</span>
+                        <span id="char-count" class="text-gray-500">0/20</span>
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="player-name" maxlength="20" placeholder="พิมพ์ชื่อของคุณที่นี่..." 
+                            class="w-full bg-cyber-dark/90 border border-cyber-blue/40 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-blue focus:ring-1 focus:ring-cyber-blue transition-all">
+                        <i class="fa-solid fa-id-card absolute right-3 top-3 text-gray-500 text-xs"></i>
+                    </div>
+                </div>
+
+                <!-- Start Game Button -->
+                <button id="btn-start-game" disabled class="w-full py-3 px-6 rounded-xl font-bold text-white bg-gradient-to-r from-gray-600 to-gray-700 opacity-50 cursor-not-allowed transition-all shadow-lg flex items-center justify-center gap-2">
+                    <span>เริ่มภารกิจไซเบอร์</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <div class="text-xs text-gray-400 flex items-center gap-4">
+                <span class="flex items-center gap-1"><i class="fa-solid fa-hand-pointer text-cyber-blue"></i> รองรับการใช้นิ้วชี้ควบคุม AR</span>
+                <span class="flex items-center gap-1"><i class="fa-solid fa-mobile-screen"></i> หรือสัมผัสหน้าจอ</span>
+            </div>
+        </section>
+
+        <!-- ==================== SCREEN 2: GAMEPLAY SCREEN ==================== -->
+        <section id="screen-game" class="w-full h-full flex flex-col justify-between hidden space-y-4">
+            
+            <!-- Game Header Stats Bar -->
+            <header class="glass-panel p-3 rounded-2xl flex items-center justify-between border-cyber-blue/30">
+                <div class="flex items-center gap-3">
+                    <img id="game-avatar" src="" class="w-10 h-10 rounded-full border border-cyber-blue object-cover" alt="Profile">
+                    <div>
+                        <h2 id="game-player-name" class="text-xs md:text-sm font-bold text-white leading-tight">นักสืบไซเบอร์</h2>
+                        <span class="text-[10px] text-cyber-blue flex items-center gap-1">
+                            <i class="fa-solid fa-shield-cat"></i> Level: เจ้าหน้าที่ระดับ 5
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <!-- Question Counter -->
+                    <div class="text-center px-3 py-1 rounded-xl bg-cyber-dark/60 border border-cyber-blue/20">
+                        <span class="text-[10px] text-gray-400 block uppercase">ข้อที่</span>
+                        <span id="question-progress" class="text-sm md:text-base font-bold text-cyber-blue">1/12</span>
+                    </div>
+
+                    <!-- Current Score -->
+                    <div class="text-center px-3 py-1 rounded-xl bg-cyber-dark/60 border border-cyber-pink/30">
+                        <span class="text-[10px] text-gray-400 block uppercase">คะแนน</span>
+                        <span id="current-score" class="text-sm md:text-base font-bold text-cyber-pink">0</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Question Card -->
+            <div class="glass-panel p-5 md:p-6 rounded-3xl flex-1 flex flex-col justify-between space-y-4 border-cyber-blue/40 relative overflow-hidden">
+                
+                <!-- AR Status Indicator -->
+                <div class="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-cyber-dark/80 border border-cyber-blue/30 text-[10px] text-cyber-blue">
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
+                    <span>AR Hand Tracking Active</span>
+                </div>
+
+                <div class="space-y-3 mt-2">
+                    <span id="question-category" class="inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-cyber-purple/50 text-cyber-blue border border-cyber-purple">
+                        หมวดหมู่: รหัสผ่านปลอดภัย
+                    </span>
+                    <h2 id="question-text" class="text-base md:text-xl font-bold text-white leading-snug">
+                        คำถามจะแสดงผลที่นี่...
+                    </h2>
+                </div>
+
+                <!-- Answer Choice Options Container -->
+                <div id="choices-container" class="grid grid-cols-1 md:grid-cols-2 gap-3 my-auto">
+                    <!-- Dynamically populated choices -->
+                </div>
+
+                <!-- Feedback Popup Overlay -->
+                <div id="feedback-overlay" class="absolute inset-0 z-30 bg-cyber-dark/95 backdrop-blur-md rounded-3xl p-6 flex flex-col items-center justify-center text-center space-y-4 hidden animate-pop-in">
+                    <div id="feedback-icon-container" class="w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-1">
+                        <!-- Icon generated by JS -->
+                    </div>
+                    <h3 id="feedback-title" class="text-2xl font-bold">ถูกต้อง!</h3>
+                    <p id="feedback-text" class="text-sm md:text-base text-gray-300 max-w-md leading-relaxed">
+                        คำอธิบายเพิ่มเติมเกี่ยวกับความปลอดภัยไซเบอร์...
+                    </p>
+                    <button id="btn-next-question" class="glass-button px-8 py-3 rounded-xl font-bold text-cyber-blue border-cyber-blue shadow-lg hover:bg-cyber-blue hover:text-black transition-all text-sm">
+                        ข้อถัดไป <i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Footer Hints -->
+            <footer class="text-center text-xs text-gray-400 py-1">
+                <i class="fa-solid fa-lightbulb text-yellow-400 mr-1"></i> ค้นหาคำตอบที่ถูกต้องที่สุดเพื่อปกป้องข้อมูลส่วนตัวของคุณ!
+            </footer>
+        </section>
+
+        <!-- ==================== SCREEN 3: GAME OVER / LEADERBOARD ==================== -->
+        <section id="screen-result" class="w-full h-full flex flex-col items-center justify-center hidden animate-pop-in space-y-5 my-auto">
+            
+            <div class="glass-panel p-6 md:p-8 rounded-3xl w-full max-w-lg text-center space-y-5 border-cyber-pink/40">
+                
+                <div class="relative inline-block">
+                    <img id="result-avatar" src="" class="w-24 h-24 rounded-full border-4 border-cyber-pink shadow-[0_0_25px_rgba(255,0,127,0.5)] object-cover mx-auto" alt="Avatar">
+                    <div class="absolute -bottom-2 right-0 bg-cyber-purple border border-white text-white w-8 h-8 rounded-full flex items-center justify-center text-xs">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                </div>
+
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-extrabold text-white">ภารกิจเสร็จสิ้น!</h2>
+                    <p id="result-player-name" class="text-cyber-blue font-semibold text-lg">คุณ: นักสืบไซเบอร์</p>
+                </div>
+
+                <!-- Final Score Display -->
+                <div class="bg-cyber-dark/80 rounded-2xl p-4 border border-cyber-blue/20 flex justify-around items-center">
+                    <div>
+                        <span class="text-xs text-gray-400 uppercase block">คะแนนรวม</span>
+                        <span id="result-final-score" class="text-3xl font-black text-cyber-blue">0</span>
+                        <span class="text-xs text-gray-400">/ 120</span>
+                    </div>
+                    <div class="h-10 w-[1px] bg-gray-700"></div>
+                    <div>
+                        <span class="text-xs text-gray-400 uppercase block">ระดับฉายา</span>
+                        <span id="result-badge" class="text-sm font-bold text-cyber-pink">ผู้เริ่มต้น</span>
+                    </div>
+                </div>
+
+                <!-- Leaderboard Section -->
+                <div class="space-y-2 text-left">
+                    <h3 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-trophy text-yellow-400"></i> ตารางอันดับนักสืบยอดเยี่ยม (Top Detectives)
+                    </h3>
+                    <div id="leaderboard-list" class="bg-cyber-dark/90 rounded-xl p-2 max-h-40 overflow-y-auto border border-gray-800 space-y-1 text-xs">
+                        <div class="text-center py-4 text-gray-500">กำลังโหลดอันดับ...</div>
+                    </div>
+                </div>
+
+                <!-- Play Again Action -->
+                <button id="btn-restart" class="w-full py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-cyber-blue via-cyber-purple to-cyber-pink hover:opacity-90 transition-all shadow-[0_0_20px_rgba(0,240,255,0.4)] flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i> เล่นอีกครั้ง
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Hidden Canvas for Snapshot Capture -->
+    <canvas id="snapshot-canvas" class="hidden"></canvas>
+
+    <!-- ==================== JAVASCRIPT & FIREBASE INTEGRATION ==================== -->
+    <script type="module">
+        // Firebase SDK Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase Setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'cyber-sleuth-p5';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        
+        let app, auth, db, currentUser = null;
+
+        if (firebaseConfig) {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Authenticate
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+                initAuth().catch(console.error);
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUser = user;
+                    }
+                });
+            } catch (err) {
+                console.warn("Firebase initialization warning:", err);
+            }
+        }
+
+        // ==================== AUDIO SYNTHESIZER (Web Audio API) ====================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(200, now + 0.05);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.05);
+                osc.start(now);
+                osc.stop(now + 0.05);
+            } else if (type === 'correct') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'incorrect') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now); // A3
+                osc.frequency.setValueAtTime(164.81, now + 0.12); // E3
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        }
+
+        // ==================== QUESTION DATABASE (ป.5 วิทยาการคำนวณ) ====================
+        const questions = [
+            {
+                category: "รหัสผ่านปลอดภัย (Password Safety)",
+                text: "รหัสผ่านแบบใดปลอดภัยที่สุดสำหรับการใช้งานอินเทอร์เน็ต?",
+                choices: [
+                    "12345678",
+                    "birthday2014",
+                    "P@ssw0rd_P5#2026",
+                    "admin"
+                ],
+                correct: 2,
+                explanation: "รหัสผ่านที่ดีควรประกอบด้วยอักษรตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และสัญลักษณ์พิเศษ มีความยาวอย่างน้อย 8 ตัวอักษรขึ้นไป"
+            },
+            {
+                category: "ข่าวปลอม (Fake News)",
+                text: "หากเจอฟาดหัวข่าวว่า 'ดื่มน้ำมะนาวรักษาโควิดได้ 100%' นักเรียนควรทำอย่างไรเป็นอันดับแรก?",
+                choices: [
+                    "กดแชร์ให้เพื่อนๆ ทันที",
+                    "ตรวจสอบแหล่งที่มาจากสำนักข่าวหรือหน่วยงานรัฐที่น่าเชื่อถือก่อน",
+                    "โพสต์ด่าคนที่เขียนข่าว",
+                    "ส่งต่อเข้าไปในกลุ่มไลน์ครอบครัว"
+                ],
+                correct: 1,
+                explanation: "ก่อนเชื่อหรือแชร์ข้อมูลใดๆ ควรตรวจสอบแหล่งที่มา (Fact Check) จากหน่วยงานที่น่าเชื่อถือ เช่น กระทรวงสาธารณสุข"
+            },
+            {
+                category: "การกลั่นแกล้งบนไซเบอร์ (Cyberbullying)",
+                text: "หากเห็นเพื่อนถูกโพสต์ล้อเลียนรูปร่างบนโซเชียลมีเดีย ควรรับมืออย่างไร?",
+                choices: [
+                    "เข้าไปคอมเมนต์หัวเราะผสมโรง",
+                    "แชร์โพสต์ต่อไปให้ห้องอื่นดู",
+                    "แคปหน้าจอไว้เป็นหลักฐาน แจ้งคุณครูหรือผู้ใหญ่ และให้กำลังใจเพื่อน",
+                    "โพสต์ด่าสวนกลับด้วยคำหยาบคาย"
+                ],
+                correct: 2,
+                explanation: "เมื่อพบการ Cyberbullying ควรปฏิเสธการร่วมวง เก็บหลักฐาน แจ้งผู้ใหญ่ และช่วยเหลือผู้โดนกระทำ ไม่ใช้ความรุนแรงตอบโต้"
+            },
+            {
+                category: "ข้อมูลส่วนตัว (Personal Data)",
+                text: "ข้อมูลประเภทใดที่ไม่ควรรีบโพสต์ลงบนอินเทอร์เน็ตสาธารณะ?",
+                choices: [
+                    "ภาพวาดการ์ตูนที่ตัวเองเขียน",
+                    "บัตรประชาชนและเลขที่บ้าน",
+                    "ความเห็นเกี่ยวกับภาพยนตร์ที่ชอบ",
+                    "วิชาเรียนที่ชอบ"
+                ],
+                correct: 1,
+                explanation: "เลขบัตรประชาชน ที่อยู่ เบอร์โทรศัพท์ และวันเดือนปีเกิดเป็นข้อมูลส่วนบุคคลที่อาจถูกมิจฉาชีพนำไปแอบอ้างทำสิ่งผิดกฎหมายได้"
+            },
+            {
+                category: "ภัยหลอกลวง (Phishing Scam)",
+                text: "มี SMS ส่งมาว่า 'คุณได้รับทุนการศึกษา 10,000 บาท กดลิงก์เพื่อรับเงิน' นักเรียนควรทำอย่างไร?",
+                choices: [
+                    "รีบกดลิงก์และกรอกเลขบัญชีทันที",
+                    "ส่งต่อให้เพื่อนกดบ้าง",
+                    "อย่ากดลิงก์ และแจ้งผู้ปกครองให้ช่วยตรวจสอบ",
+                    "โทรไปขอบคุณตามเบอร์ที่ส่งมา"
+                ],
+                correct: 2,
+                explanation: "ลิงก์แปลกปลอมพร้อมข้อเสนอดีเกินจริงมักเป็น Phishing ของมิจฉาชีพ ห้ามกดลิงก์หรือกรอกข้อมูลส่วนตัวเด็ดขาด"
+            },
+            {
+                category: "รอยเท้าดิจิทัล (Digital Footprint)",
+                text: "Digital Footprint หมายถึงอะไร?",
+                choices: [
+                    "รอยเท้าที่เปื้อนหมึกพิมพ์คอมพิวเตอร์",
+                    "ร่องรอยการใช้งานอินเทอร์เน็ตที่ถูกบันทึกไว้ในระบบ",
+                    "โปรแกรมสแกนไวรัสรุ่นใหม่",
+                    "อุปกรณ์นับก้าวเดินดิจิทัล"
+                ],
+                correct: 1,
+                explanation: "ทุกกิจกรรมที่เราทำบนอินเทอร์เน็ต ไม่ว่าจะเป็นการโพสต์ กดไลก์ ค้นหาข้อมูล จะทิ้งร่องรอยดิจิทัลไว้เสมอ และยากที่จะลบออกทั้งหมด"
+            },
+            {
+                category: "ลิขสิทธิ์และจริยธรรม (Copyright)",
+                text: "หากต้องการนำภาพจากอินเทอร์เน็ตมาทำรายงานส่งครู ควรปฏิบัติตามข้อใดจึงจะเหมาะสมที่สุด?",
+                choices: [
+                    "แอบตัดลายน้ำออกแล้วบอกว่าเป็นรูปที่ถ่ายเอง",
+                    "นำภาพมาใช้และอ้างอิงแหล่งที่มา (Credit) ให้ชัดเจน",
+                    "นำภาพไปขายต่อให้เพื่อน",
+                    "ไม่ต้องทำอะไรเลยเพราะใช้ส่งครู"
+                ],
+                correct: 1,
+                explanation: "การนำผลงานผู้อื่นมาใช้ควรให้เกียรติเจ้าของผลงานโดยการใส่อ้างอิง (Credit) หรือเลือกใช้ภาพที่อนุญาตให้ใช้ฟรี (Creative Commons)"
+            },
+            {
+                category: "มารยาทเน็ตติเกต (Netiquette)",
+                text: "ข้อใดถือเป็นมารยาทที่ดีในการสื่อสารในโลกออนไลน์?",
+                choices: [
+                    "พิมพ์ภาษาไทยด้วยตัวอักษรใหญ่ทั้งหมดเพื่อเรียกร้องความสนใจ",
+                    "ใช้คำสุภาพ เคารพความคิดเห็นผู้อื่น และไม่สร้างความเกลียดชัง",
+                    "แอบใช้บัญชีของเพื่อนไปโพสต์ตลกๆ",
+                    "ทักแชทหาครูตอนเที่ยงคืนเพื่อถามการบ้าน"
+                ],
+                correct: 1,
+                explanation: "มารยาทดิจิทัล (Netiquette) คือการเคารพผู้อื่น ใช้ภาษาเหมาะสม และคำนึงถึงกาลเทศะเช่นเดียวกับโลกจริง"
+            },
+            {
+                category: "ความมั่นคงปลอดภัย (Security)",
+                text: "เมื่อใช้งานคอมพิวเตอร์ที่โรงเรียนหรือร้านอินเทอร์เน็ตเสร็จแล้ว ควรทำสิ่งใดเป็นสำคัญ?",
+                choices: [
+                    "ปิดหน้าจอคอมพิวเตอร์ทันที",
+                    "ออกจากระบบ (Log out) ทุกบัญชีการใช้งาน",
+                    "เปิดเบราว์เซอร์ทิ้งไว้",
+                    "เปลี่ยนวอลเปเปอร์หน้าจอ"
+                ],
+                correct: 1,
+                explanation: "ต้อง Log out จากทุกระบบหลังใช้งานคอมพิวเตอร์สาธารณะ เพื่อป้องกันผู้อื่นสวมรอยใช้บัญชีของเรา"
+            },
+            {
+                category: "ภัยคุกคามมัลแวร์ (Malware)",
+                text: "ข้อใดคือสัญญาณเตือนว่าอุปกรณ์ของคุณอาจติดไวรัสหรือมัลแวร์?",
+                choices: [
+                    "เครื่องเปิดไวขึ้นกว่าเดิม",
+                    "มีโฆษณาเด้งขึ้นมาผิดปกติ เครื่องช้าลงมาก หรือมีไฟล์หาย",
+                    "แบตเตอรี่ใช้นานขึ้น",
+                    "สีหน้าจอสดใสขึ้น"
+                ],
+                correct: 1,
+                explanation: "มัลแวร์ มักทำให้ระบบทำงานผิดปกติ ช้าลง แอบแสดงโฆษณา หรือขโมยข้อมูลส่วนตัว"
+            },
+            {
+                category: "บุคคลแปลกหน้า (Online Stranger Danger)",
+                text: "มีคนที่ไม่รู้จักในเกมออนไลน์นัดเจอตัวจริงที่สวนสาธารณะ นักเรียนควรทำอย่างไร?",
+                choices: [
+                    "ไปหาคนเดียวทันทีเพื่อสร้างมิตรภาพ",
+                    "ปฏิเสธ และบอกให้ผู้ปกครองทราบทันที",
+                    "ชวนเพื่อนไปกันสองคน",
+                    "ส่งที่อยู่บ้านไปให้เขาแทน"
+                ],
+                correct: 1,
+                explanation: "อย่านัดพบคนแปลกหน้าที่รู้จักผ่านออนไลน์โดยเด็ดขาด เพราะอาจเป็นมิจฉาชีพหรือผู้ไม่หวังดี"
+            },
+            {
+                category: "การใช้เทคโนโลยีอย่างสมดุล (Screen Time)",
+                text: "การแบ่งเวลาใช้งานหน้าจอ (Screen Time) ที่เหมาะสมจะส่งผลดีอย่างไร?",
+                choices: [
+                    "ทำให้เล่นเกมเก่งที่สุดในชั้นเรียน",
+                    "ช่วยรักษาสุขภาพสายตา สมอง และมีเวลาออกกำลังกายหรือทำกิจกรรมอื่น",
+                    "ทำให้มีผู้ติดตามในโซเชียลเพิ่มขึ้น",
+                    "ทำให้ไม่ต้องทำบ้านส่งครู"
+                ],
+                correct: 1,
+                explanation: "การใช้เทคโนโลยีอย่างเหมาะสมและมีขอบเขตช่วยป้องกันภาวะเสพติดหน้าจอ และส่งผลดีต่อสุขภาพกายและใจ"
+            }
+        ];
+
+        // ==================== STATE MANAGEMENT ====================
+        let gameState = {
+            playerName: '',
+            playerPhotoDataUrl: null,
+            currentQuestionIndex: 0,
+            score: 0,
+            answersHistory: [],
+            isAnswerSelected: false,
+            handHoverTarget: null,
+            hoverStartTime: 0
+        };
+
+        // DOM Elements
+        const screens = {
+            welcome: document.getElementById('screen-welcome'),
+            game: document.getElementById('screen-game'),
+            result: document.getElementById('screen-result')
+        };
+
+        const elements = {
+            video: document.getElementById('ar-video'),
+            arCanvas: document.getElementById('ar-canvas'),
+            fxCanvas: document.getElementById('fx-canvas'),
+            cursor: document.getElementById('ar-cursor'),
+            cursorProgress: document.getElementById('cursor-progress'),
+            avatarPreview: document.getElementById('avatar-preview'),
+            avatarPlaceholder: document.getElementById('avatar-placeholder'),
+            btnTakePhoto: document.getElementById('btn-take-photo'),
+            inputPlayerName: document.getElementById('player-name'),
+            charCount: document.getElementById('char-count'),
+            btnStartGame: document.getElementById('btn-start-game'),
+            snapshotCanvas: document.getElementById('snapshot-canvas'),
+            
+            // Game elements
+            gameAvatar: document.getElementById('game-avatar'),
+            gamePlayerName: document.getElementById('game-player-name'),
+            questionProgress: document.getElementById('question-progress'),
+            currentScore: document.getElementById('current-score'),
+            questionCategory: document.getElementById('question-category'),
+            questionText: document.getElementById('question-text'),
+            choicesContainer: document.getElementById('choices-container'),
+            feedbackOverlay: document.getElementById('feedback-overlay'),
+            feedbackIconContainer: document.getElementById('feedback-icon-container'),
+            feedbackTitle: document.getElementById('feedback-title'),
+            feedbackText: document.getElementById('feedback-text'),
+            btnNextQuestion: document.getElementById('btn-next-question'),
+            
+            // Result elements
+            resultAvatar: document.getElementById('result-avatar'),
+            resultPlayerName: document.getElementById('result-player-name'),
+            resultFinalScore: document.getElementById('result-final-score'),
+            resultBadge: document.getElementById('result-badge'),
+            leaderboardList: document.getElementById('leaderboard-list'),
+            btnRestart: document.getElementById('btn-restart')
+        };
+
+        // Canvas Contexts
+        const arCtx = elements.arCanvas.getContext('2d');
+        const fxCtx = elements.fxCanvas.getContext('2d');
+
+        // Resize Canvas Helper
+        function resizeCanvases() {
+            elements.arCanvas.width = window.innerWidth;
+            elements.arCanvas.height = window.innerHeight;
+            elements.fxCanvas.width = window.innerWidth;
+            elements.fxCanvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvases);
+        resizeCanvases();
+
+        // Switch Active Screen
+        function showScreen(screenKey) {
+            Object.keys(screens).forEach(key => {
+                if (key === screenKey) {
+                    screens[key].classList.remove('hidden');
+                } else {
+                    screens[key].classList.add('hidden');
+                }
+            });
+        }
+
+        // ==================== WEBCAM & MEDIAPIPE HANDS ====================
+        let hands = null;
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false
+                });
+                elements.video.srcObject = stream;
+                await elements.video.play();
+                
+                initHandTracking();
+            } catch (err) {
+                console.error("Camera access error:", err);
+                // Fallback background styling if no camera permission
+                document.body.style.background = 'linear-gradient(135deg, #0a0a16 0%, #1a1a3a 100%)';
+            }
+        }
+
+        function initHandTracking() {
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            hands.onResults(onHandResults);
+
+            const cameraUtils = new Camera(elements.video, {
+                onFrame: async () => {
+                    await hands.send({ image: elements.video });
+                },
+                width: 1280,
+                height: 720
+            });
+            cameraUtils.start();
+        }
+
+        // Process MediaPipe Hand Tracking Results
+        function onHandResults(results) {
+            arCtx.clearRect(0, 0, elements.arCanvas.width, elements.arCanvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Index finger tip is Landmark 8
+                const indexTip = landmarks[8];
+
+                // Note: Video is mirrored horizontally
+                const screenX = (1 - indexTip.x) * window.innerWidth;
+                const screenY = indexTip.y * window.innerHeight;
+
+                // Render AR Cursor
+                elements.cursor.classList.remove('hidden');
+                elements.cursor.style.left = `${screenX}px`;
+                elements.cursor.style.top = `${screenY}px`;
+
+                // Draw Cyber Skeletal Hand Highlights
+                drawCyberHandOverlay(landmarks);
+
+                // Handle Hover/Selection Interaction
+                handleARHoverInteraction(screenX, screenY);
+            } else {
+                elements.cursor.classList.add('hidden');
+                resetHoverState();
+            }
+        }
+
+        function drawCyberHandOverlay(landmarks) {
+            arCtx.save();
+            arCtx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+            arCtx.lineWidth = 2;
+
+            // Connect key joints
+            const connections = [
+                [0,1],[1,2],[2,3],[3,4],
+                [0,5],[5,6],[6,7],[7,8],
+                [5,9],[9,10],[10,11],[11,12],
+                [9,13],[13,14],[14,15],[15,16],
+                [13,17],[17,18],[18,19],[19,20],[0,17]
+            ];
+
+            connections.forEach(([i, j]) => {
+                const p1 = landmarks[i];
+                const p2 = landmarks[j];
+                arCtx.beginPath();
+                arCtx.moveTo((1 - p1.x) * elements.arCanvas.width, p1.y * elements.arCanvas.height);
+                arCtx.lineTo((1 - p2.x) * elements.arCanvas.width, p2.y * elements.arCanvas.height);
+                arCtx.stroke();
+            });
+
+            // Draw glowing joint points
+            landmarks.forEach((p, idx) => {
+                const x = (1 - p.x) * elements.arCanvas.width;
+                const y = p.y * elements.arCanvas.height;
+                arCtx.beginPath();
+                arCtx.arc(x, y, idx === 8 ? 6 : 3, 0, Math.PI * 2);
+                arCtx.fillStyle = idx === 8 ? '#ff007f' : '#00f0ff';
+                arCtx.fill();
+            });
+
+            arCtx.restore();
+        }
+
+        // Check if Finger Cursor is Hovering Over Interactive Buttons
+        function handleARHoverInteraction(x, y) {
+            // Find all clickable buttons currently visible
+            const clickables = document.querySelectorAll('button:not(:disabled), input');
+            let hoveredElem = null;
+
+            clickables.forEach(elem => {
+                const rect = elem.getBoundingClientRect();
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    hoveredElem = elem;
+                }
+            });
+
+            if (hoveredElem) {
+                if (gameState.handHoverTarget === hoveredElem) {
+                    // Holding hover
+                    const elapsedTime = Date.now() - gameState.hoverStartTime;
+                    const hoverThreshold = 1200; // 1.2 seconds hover to auto-click
+
+                    elements.cursorProgress.classList.remove('hidden');
+
+                    if (elapsedTime >= hoverThreshold) {
+                        // Trigger Click!
+                        hoveredElem.click();
+                        playSound('click');
+                        resetHoverState();
+                    }
+                } else {
+                    // New target
+                    gameState.handHoverTarget = hoveredElem;
+                    gameState.hoverStartTime = Date.now();
+                }
+            } else {
+                resetHoverState();
+            }
+        }
+
+        function resetHoverState() {
+            gameState.handHoverTarget = null;
+            gameState.hoverStartTime = 0;
+            elements.cursorProgress.classList.add('hidden');
+        }
+
+        // ==================== SCREEN 1: WELCOME LOGIC ====================
+
+        // Take Avatar Photo Snapshot
+        elements.btnTakePhoto.addEventListener('click', () => {
+            playSound('click');
+            const video = elements.video;
+            const canvas = elements.snapshotCanvas;
+            canvas.width = 300;
+            canvas.height = 300;
+
+            const ctx = canvas.getContext('2d');
+            
+            // Mirror image capture
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+
+            // Center Crop
+            const minDim = Math.min(video.videoWidth || 640, video.videoHeight || 480);
+            const startX = ((video.videoWidth || 640) - minDim) / 2;
+            const startY = ((video.videoHeight || 480) - minDim) / 2;
+
+            ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 300, 300);
+
+            gameState.playerPhotoDataUrl = canvas.toDataURL('image/jpeg');
+
+            // Update UI Previews
+            elements.avatarPreview.src = gameState.playerPhotoDataUrl;
+            elements.avatarPreview.classList.remove('hidden');
+            elements.avatarPlaceholder.classList.add('hidden');
+            
+            elements.btnTakePhoto.innerHTML = `<i class="fa-solid fa-rotate"></i> ถ่ายใหม่อีกครั้ง`;
+
+            validateForm();
+        });
+
+        // Player Name Input Validation
+        elements.inputPlayerName.addEventListener('input', (e) => {
+            const val = e.target.value.trim();
+            gameState.playerName = val;
+            elements.charCount.textContent = `${val.length}/20`;
+            validateForm();
+        });
+
+        function validateForm() {
+            if (gameState.playerName.length > 0 && gameState.playerPhotoDataUrl) {
+                elements.btnStartGame.disabled = false;
+                elements.btnStartGame.classList.remove('opacity-50', 'cursor-not-allowed', 'from-gray-600', 'to-gray-700');
+                elements.btnStartGame.classList.add('from-cyber-blue', 'to-cyber-purple', 'hover:shadow-[0_0_20px_#00f0ff]', 'cursor-pointer');
+            } else {
+                elements.btnStartGame.disabled = true;
+                elements.btnStartGame.classList.add('opacity-50', 'cursor-not-allowed', 'from-gray-600', 'to-gray-700');
+                elements.btnStartGame.classList.remove('from-cyber-blue', 'to-cyber-purple', 'hover:shadow-[0_0_20px_#00f0ff]');
+            }
+        }
+
+        // Start Game
+        elements.btnStartGame.addEventListener('click', () => {
+            playSound('click');
+            // Setup Profile Header
+            elements.gameAvatar.src = gameState.playerPhotoDataUrl;
+            elements.gamePlayerName.textContent = gameState.playerName;
+            
+            // Reset state
+            gameState.currentQuestionIndex = 0;
+            gameState.score = 0;
+            gameState.answersHistory = [];
+            
+            showScreen('game');
+            loadQuestion(0);
+        });
+
+        // ==================== SCREEN 2: GAME ENGINE ====================
+
+        function loadQuestion(index) {
+            gameState.isAnswerSelected = false;
+            elements.feedbackOverlay.classList.add('hidden');
+
+            const q = questions[index];
+            elements.questionProgress.textContent = `${index + 1}/${questions.length}`;
+            elements.currentScore.textContent = gameState.score;
+            elements.questionCategory.textContent = `หมวดหมู่: ${q.category}`;
+            elements.questionText.textContent = q.text;
+
+            // Render Choices
+            elements.choicesContainer.innerHTML = '';
+            q.choices.forEach((choice, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `glass-button p-4 rounded-2xl text-left font-medium text-sm md:text-base flex items-center gap-3 text-gray-100 hover:text-cyber-blue transition-all w-full animate-pop-in`;
+                btn.innerHTML = `
+                    <span class="w-8 h-8 rounded-xl bg-cyber-blue/20 border border-cyber-blue/40 flex items-center justify-center font-bold text-cyber-blue text-xs shrink-0">
+                        ${String.fromCharCode(65 + idx)}
+                    </span>
+                    <span class="flex-1">${choice}</span>
+                `;
+                
+                btn.addEventListener('click', () => handleChoiceSelect(idx, btn));
+                elements.choicesContainer.appendChild(btn);
+            });
+        }
+
+        function handleChoiceSelect(selectedIndex, btnElement) {
+            if (gameState.isAnswerSelected) return;
+            gameState.isAnswerSelected = true;
+
+            const q = questions[gameState.currentQuestionIndex];
+            const isCorrect = selectedIndex === q.correct;
+
+            // Mark visually
+            if (isCorrect) {
+                btnElement.classList.add('selected', 'border-green-400', 'bg-green-500/20');
+                playSound('correct');
+                triggerParticleFX();
+                triggerConfetti();
+                gameState.score += 10;
+            } else {
+                btnElement.classList.add('border-red-500', 'bg-red-500/20');
+                playSound('incorrect');
+            }
+
+            elements.currentScore.textContent = gameState.score;
+
+            // Show Feedback Overlay after short delay
+            setTimeout(() => {
+                showFeedback(isCorrect, q);
+            }, 600);
+        }
+
+        function showFeedback(isCorrect, question) {
+            elements.feedbackOverlay.classList.remove('hidden');
+            
+            if (isCorrect) {
+                elements.feedbackIconContainer.className = 'w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-1 bg-green-500/20 border-2 border-green-400 text-green-400 shadow-[0_0_20px_rgba(74,222,128,0.5)]';
+                elements.feedbackIconContainer.innerHTML = `<i class="fa-solid fa-check"></i>`;
+                elements.feedbackTitle.textContent = 'คำตอบถูกต้อง!';
+                elements.feedbackTitle.className = 'text-2xl font-bold text-green-400';
+            } else {
+                elements.feedbackIconContainer.className = 'w-16 h-16 rounded-full flex items-center justify-center text-3xl mb-1 bg-red-500/20 border-2 border-red-400 text-red-400 shadow-[0_0_20px_rgba(248,113,113,0.5)]';
+                elements.feedbackIconContainer.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+                elements.feedbackTitle.textContent = 'ยังไม่ถูกต้อง!';
+                elements.feedbackTitle.className = 'text-2xl font-bold text-red-400';
+            }
+
+            elements.feedbackText.textContent = question.explanation;
+
+            if (gameState.currentQuestionIndex >= questions.length - 1) {
+                elements.btnNextQuestion.innerHTML = `สรุปผลภารกิจ <i class="fa-solid fa-trophy ml-1"></i>`;
+            } else {
+                elements.btnNextQuestion.innerHTML = `ข้อถัดไป <i class="fa-solid fa-chevron-right ml-1"></i>`;
+            }
+        }
+
+        elements.btnNextQuestion.addEventListener('click', () => {
+            playSound('click');
+            if (gameState.currentQuestionIndex < questions.length - 1) {
+                gameState.currentQuestionIndex++;
+                loadQuestion(gameState.currentQuestionIndex);
+            } else {
+                finishGame();
+            }
+        });
+
+        // Particle FX for Correct Answer
+        function triggerParticleFX() {
+            const particles = [];
+            const count = 30;
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2,
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: (Math.random() - 0.5) * 12,
+                    size: Math.random() * 6 + 2,
+                    color: Math.random() > 0.5 ? '#00f0ff' : '#ff007f',
+                    life: 1
+                });
+            }
+
+            function animateParticles() {
+                fxCtx.clearRect(0, 0, elements.fxCanvas.width, elements.fxCanvas.height);
+                let alive = false;
+                particles.forEach(p => {
+                    if (p.life > 0) {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.life -= 0.02;
+                        fxCtx.beginPath();
+                        fxCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        fxCtx.fillStyle = p.color;
+                        fxCtx.globalAlpha = Math.max(0, p.life);
+                        fxCtx.fill();
+                        alive = true;
+                    }
+                });
+                if (alive) {
+                    requestAnimationFrame(animateParticles);
+                } else {
+                    fxCtx.clearRect(0, 0, elements.fxCanvas.width, elements.fxCanvas.height);
+                }
+            }
+            animateParticles();
+        }
+
+        function triggerConfetti() {
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 40,
+                    spread: 60,
+                    origin: { y: 0.7 },
+                    colors: ['#00f0ff', '#ff007f', '#7000ff']
+                });
+            }
+        }
+
+        // ==================== SCREEN 3: RESULT & LEADERBOARD ====================
+
+        async function finishGame() {
+            showScreen('result');
+            elements.resultAvatar.src = gameState.playerPhotoDataUrl;
+            elements.resultPlayerName.textContent = `นักสืบ: ${gameState.playerName}`;
+            elements.resultFinalScore.textContent = gameState.score;
+
+            // Assign Badge Level based on score
+            let badge = "นักสืบระดับฝึกหัด";
+            if (gameState.score >= 100) {
+                badge = "สุดยอดนักสืบไซเบอร์ Master";
+            } else if (gameState.score >= 70) {
+                badge = "เจ้าหน้าที่ผู้เชี่ยวชาญ Cyber";
+            } else if (gameState.score >= 50) {
+                badge = "นักสืบสายเสมา";
+            }
+            elements.resultBadge.textContent = badge;
+
+            // Save Score to Firestore
+            if (db) {
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'), {
+                        name: gameState.playerName,
+                        score: gameState.score,
+                        badge: badge,
+                        timestamp: Date.now()
+                    });
+                } catch (err) {
+                    console.error("Firestore save error:", err);
+                }
+            }
+
+            // Load Global High Scores
+            loadLeaderboard();
+        }
+
+        async function loadLeaderboard() {
+            elements.leaderboardList.innerHTML = `<div class="text-center py-4 text-gray-500"><i class="fa-solid fa-spinner animate-spin"></i> กำลังโหลดอันดับ...</div>`;
+            
+            if (!db) {
+                elements.leaderboardList.innerHTML = `<div class="text-center py-3 text-gray-400">โหมดเล่นแบบออฟไลน์</div>`;
+                return;
+            }
+
+            try {
+                const snapshot = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard'));
+                let scores = [];
+                snapshot.forEach(doc => {
+                    scores.push(doc.data());
+                });
+
+                // Sort descending in memory (Rule 2)
+                scores.sort((a, b) => b.score - a.score);
+                scores = scores.slice(0, 5); // Top 5
+
+                if (scores.length === 0) {
+                    elements.leaderboardList.innerHTML = `<div class="text-center py-3 text-gray-500">ยังไม่มีข้อมูลอันดับ</div>`;
+                    return;
+                }
+
+                elements.leaderboardList.innerHTML = '';
+                scores.forEach((item, index) => {
+                    const row = document.createElement('div');
+                    row.className = `flex items-center justify-between p-2 rounded-lg ${index === 0 ? 'bg-cyber-purple/30 border border-cyber-purple/50' : 'bg-cyber-dark/60'}`;
+                    row.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="w-5 h-5 rounded-full ${index === 0 ? 'bg-yellow-400 text-black' : 'bg-gray-700 text-white'} font-bold flex items-center justify-center text-[10px]">
+                                ${index + 1}
+                            </span>
+                            <span class="font-semibold text-white">${escapeHtml(item.name)}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-gray-400">${item.badge || ''}</span>
+                            <span class="font-bold text-cyber-blue">${item.score} คะแนน</span>
+                        </div>
+                    `;
+                    elements.leaderboardList.appendChild(row);
+                });
+            } catch (err) {
+                console.error("Leaderboard fetch error:", err);
+                elements.leaderboardList.innerHTML = `<div class="text-center py-3 text-gray-500">ไม่สามารถโหลดอันดับได้</div>`;
+            }
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        elements.btnRestart.addEventListener('click', () => {
+            playSound('click');
+            showScreen('welcome');
+        });
+
+        // Initialize Camera on App Load
+        window.addEventListener('load', () => {
+            initCamera();
+        });
+    </script>
+</body>
+</html>
